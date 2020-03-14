@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "es5", 
+    "module": "commonjs",
+    "lib": [
+      "dom",
+      "es2017",
+      "es6",
+      "esnext.asynciterable"
+    ],
+    "declaration": true,
+    "outDir": "./dist",
+    "downlevelIteration": true,
+    "strict": true,
+    "noUnusedLocals": true,
+    "esModuleInterop": true
+  }
+}
