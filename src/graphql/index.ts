@@ -17,6 +17,7 @@ import {
     TypeNode,
 } from "graphql";
 import { PubSub } from "graphql-subscriptions";
+import { Definition } from "../firestore-link";
 
 interface Context {
     database: firestore.Firestore;
@@ -93,21 +94,23 @@ function createInputFieldType(
 }
 
 function createCreateInputObjectType(
-    definition: ObjectTypeDefinitionNode,
+    definition: GraphQLObjectType,
     typeMapping: TypeMapping,
-    objectDefinitions: ObjectDefinitions,
+    objectDefinitions: GraphQLObjectType[],
 ): GraphQLInputObjectType {
-    const typename = definition.name.value;
+    const typename = definition.name;
+
+    console.debug( definition.toConfig().fields);
 
     const fields: any = {};
-    if (definition.fields) {
-        for (const field of definition.fields) {
-            const baseType = typeMapping[getBaseTypename(field.type)];
-            if (isLeafType(baseType) && baseType !== GraphQLID) {
-                fields[field.name.value] = { type: createInputFieldType(field.type, typeMapping, objectDefinitions) };
-            }
-        }
-    }
+    // if (definition.toConfig().fields) {
+    //     for (const field of definition.toConfig().fields) {
+    //         const baseType = typeMapping[getBaseTypename(field.type)];
+    //         if (isLeafType(baseType) && baseType !== GraphQLID) {
+    //             fields[field.name.value] = { type: createInputFieldType(field.type, typeMapping, objectDefinitions) };
+    //         }
+    //     }
+    // }
     const inputType = new GraphQLInputObjectType({
         name: `Create${typename}Input`,
         fields,
@@ -117,13 +120,13 @@ function createCreateInputObjectType(
 }
 
 function createCreateMutation(
-    definition: ObjectTypeDefinitionNode,
+    objectType: GraphQLObjectType,
     typeMapping: TypeMapping,
-    objectDefinitions: ObjectDefinitions,
+    objectTypes: GraphQLObjectType[],
 ) {
-    const typename = definition.name.value;
+    const typename = objectType.name;
 
-    const inputType = createCreateInputObjectType(definition, typeMapping, objectDefinitions);
+    const inputType = createCreateInputObjectType(objectType, typeMapping, objectTypes);
 
     return {
         type: typeMapping[typename],
@@ -140,47 +143,47 @@ function createCreateMutation(
     };
 }
 
-function createAddAndRemoveMutations(definition: ObjectTypeDefinitionNode, typeMapping: TypeMapping) {
-    const typename = definition.name.value;
-    const mutations = new Map();
+// function createAddAndRemoveMutations(definition: GraphQLObjectType, typeMapping: TypeMapping) {
+//     const typename = definition.name;
+//     const mutations = new Map();
 
-    if (definition.fields) {
-        for (const field of definition.fields) {
-            const fieldTypename = getBaseTypename(field.type);
+//     if (definition.fields) {
+//         for (const field of definition.fields) {
+//             const fieldTypename = getBaseTypename(field.type);
 
-            if (!isLeafType(typeMapping[fieldTypename])) {
-                const primaryId = `${typename.toLowerCase()}Id`;
-                const secondaryId = `${typename.toLowerCase()}Id`;
-                mutations.set(`add${toTitleCase(field.name.value)}To${typename}`, {
-                    type: typeMapping[typename],
-                    args: {
-                        [primaryId]: { type: GraphQLID },
-                        [secondaryId]: { type: GraphQLID },
-                    },
-                    async resolve(_: any, args: any, context: Context) {
-                        await context.database.collection(fieldTypename).doc(args[secondaryId]).update({
-                            [`__relations.${typename}.${field.name.value}`]: args[primaryId],
-                        });
-                        return args[primaryId];
-                    },
-                });
-            }
-        }
-    }
+//             if (!isLeafType(typeMapping[fieldTypename])) {
+//                 const primaryId = `${typename.toLowerCase()}Id`;
+//                 const secondaryId = `${typename.toLowerCase()}Id`;
+//                 mutations.set(`add${toTitleCase(field.name.value)}To${typename}`, {
+//                     type: typeMapping[typename],
+//                     args: {
+//                         [primaryId]: { type: GraphQLID },
+//                         [secondaryId]: { type: GraphQLID },
+//                     },
+//                     async resolve(_: any, args: any, context: Context) {
+//                         await context.database.collection(fieldTypename).doc(args[secondaryId]).update({
+//                             [`__relations.${typename}.${field.name.value}`]: args[primaryId],
+//                         });
+//                         return args[primaryId];
+//                     },
+//                 });
+//             }
+//         }
+//     }
 
-    return mutations;
-}
+//     return mutations;
+// }
 
-export function createFullSchema(partialSchema: DocumentNode): GraphQLSchema {
+export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
-    const objectDefinitions: ObjectDefinitions = Object.assign(
-        {},
-        ...partialSchema.definitions
-            .filter((definition) => definition.kind === "ObjectTypeDefinition")
-            .map((definition) => ({
-                [(definition as ObjectTypeDefinitionNode).name.value]: definition,
-            })),
-    );
+    // const objectDefinitions: ObjectDefinitions = Object.assign(
+    //     {},
+    //     ...partialSchema.definitions
+    //         .filter((definition) => definition.kind === "ObjectTypeDefinition")
+    //         .map((definition) => ({
+    //             [(definition as ObjectTypeDefinitionNode).name.value]: definition,
+    //         })),
+    // );
 
     const typeMapping: TypeMapping = {
         String: GraphQLString,
@@ -190,96 +193,102 @@ export function createFullSchema(partialSchema: DocumentNode): GraphQLSchema {
         Float: GraphQLFloat,
     };
 
-    for (const definition of partialSchema.definitions) {
-        if (definition.kind === "ObjectTypeDefinition") {
-            createObjectType(definition, typeMapping);
-        }
-    }
+    // for (const definition of partialSchema.definitions) {
+    //     if (definition.kind === "ObjectTypeDefinition") {
+    //         createObjectType(definition, typeMapping);
+    //     }
+    // }
 
     const queryType = new GraphQLObjectType({
         name: "Query",
         fields: () => {
             const fields: any = {};
-            for (const definition of partialSchema.definitions) {
-                if (definition.kind === "ObjectTypeDefinition") {
-                    const typename = definition.name.value;
-
-                    fields[typename.toLowerCase()] = {
-                        type: typeMapping[typename],
-                        args: {
-                            id: { type: GraphQLID },
-                        },
-                        async resolve(_: any, { id }: any, context: Context) {
-                            const result = await context.database.collection(typename).doc(id).get();
-                            if (result.exists) {
-                                return {
-                                    id,
-                                    ...result.data(),
-                                };
-                            } else {
-                                return null;
-                            }
-                        },
-                    };
-                }
-            }
-            return fields;
-        },
-    });
-
-    const mutationType = new GraphQLObjectType({
-        name: "Mutation",
-        fields: () => {
-            const fields: any = {};
-            for (const definition of partialSchema.definitions) {
-                if (definition.kind === "ObjectTypeDefinition") {
-                    const typename = definition.name.value;
-                    fields[`create${typename}`] = createCreateMutation(definition, typeMapping, objectDefinitions);
-                    for (const [fieldKey, field] of createAddAndRemoveMutations(definition, typeMapping)) {
-                        fields[fieldKey] = field;
-                    }
-                }
-            }
-            return fields;
-        },
-    });
-
-    const subscriptionType = new GraphQLObjectType({
-        name: "Subscription",
-        fields: () => {
-            const fields: any = {};
-            for (const definition of partialSchema.definitions) {
-                if (definition.kind === "ObjectTypeDefinition") {
-                    const typename = definition.name.value;
-                    fields[`${typename.toLowerCase()}Updated`] = {
-                        type: typeMapping[typename],
-                        args: {
-                            id: { type: GraphQLID },
-                        },
-                        subscribe: (_: any, { id }: any, context: any) => {
-                            const topic = `${typename.toLowerCase()}Updated:${id}`;
-                            const iterator = pubsub.asyncIterator(topic);
-
-                            context.database.collection(typename).doc(id)
-                                .onSnapshot((doc: any) => {
-                                    pubsub.publish(topic, {
+            objectTypes.forEach((definition) => {
+                console.debug(definition);
+                const objectType = definition.objectType;
+                const typename = objectType.name;
+                fields[typename.toLowerCase()] = {
+                    type: objectType,
+                    args: {
+                        id: { type: GraphQLID },
+                    },
+                    resolve(_: any, { id }: any, context: Context) {
+                        const result = context.database.collection(typename).doc(id).get();
+                        return new Promise(resolve=>{
+                            result.then((doc)=>{
+                                if (doc.exists) {
+                                    let target = new definition.target()
+                                    Object.assign(target , {
                                         id,
                                         ...doc.data(),
-                                    });
-                                });
+                                    })
+                                    resolve(target)
+                                } else {
+                                    resolve(null)
+                                }
+                            })
+                        })
+                    },
+                };
 
-                            return iterator;
-                        },
-                    };
-                }
-            }
+            })
+
             return fields;
         },
     });
+
+
+    // const mutationType = new GraphQLObjectType({
+    //     name: "Mutation",
+    //     fields: () => {
+    //         const fields: any = {};
+    //         objectTypes.forEach((objectType) => {
+    //             const typename = objectType.name;
+    //             const definition = typeMapping[typename] as GraphQLObjectType;
+    //             fields[`create${typename}`] = createCreateMutation(definition, typeMapping, objectTypes);
+    //             // for (const [fieldKey, field] of createAddAndRemoveMutations(definition, typeMapping)) {
+    //             //     fields[fieldKey] = field;
+    //             // }
+    //         });
+    //         return fields;
+    //     },
+    // });
+
+    // console.debug(mutationType);
+
+    // const subscriptionType = new GraphQLObjectType({
+    //     name: "Subscription",
+    //     fields: () => {
+    //         const fields: any = {};
+    //         Object.keys(typeMapping).forEach((typename) => {
+    //             fields[`${typename.toLowerCase()}Updated`] = {
+    //                 type: typeMapping[typename],
+    //                 args: {
+    //                     id: { type: GraphQLID },
+    //                 },
+    //                 subscribe: (_: any, { id }: any, context: any) => {
+    //                     const topic = `${typename.toLowerCase()}Updated:${id}`;
+    //                     const iterator = pubsub.asyncIterator(topic);
+
+    //                     context.database.collection(typename).doc(id)
+    //                         .onSnapshot((doc: any) => {
+    //                             pubsub.publish(topic, {
+    //                                 id,
+    //                                 ...doc.data(),
+    //                             });
+    //                         });
+
+    //                     return iterator;
+    //                 },
+    //             };
+    //         });
+    //         return fields;
+    //     },
+    // });
 
     return new GraphQLSchema({
         query: queryType,
-        mutation: mutationType,
-        subscription: subscriptionType,
+        // mutation: mutationType,
+        // subscription: subscriptionType,
     });
 }

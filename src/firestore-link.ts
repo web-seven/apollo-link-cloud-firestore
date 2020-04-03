@@ -1,27 +1,31 @@
 import { ApolloLink, Observable } from "apollo-link";
 import {
-    getMainDefinition,
-    hasDirectives,
+    getMainDefinition
 } from "apollo-utilities";
 import { firestore } from "firebase";
 import {
     createSourceEventStream,
-    DocumentNode,
     execute,
     OperationTypeNode,
     ExecutionResult,
+    GraphQLObjectType,
 } from "graphql";
-import { createFullSchema } from "./graphql";
 import { ExecutionResultDataDefault } from "graphql/execution/execute";
+import { createFullSchema } from "./graphql";
 
-export interface Options {
-    database: firestore.Firestore;
-    partialSchema: DocumentNode;
+export type Constructor = new () => Object;
+
+export interface Definition {
+    target: Constructor
+    objectType: GraphQLObjectType,
 }
 
-export function createFirestoreLink({ database, partialSchema }: Options) {
+export interface Options {
+    database: firestore.Firestore
+    definitions: Definition[],
+}
 
-    const schema = createFullSchema(partialSchema);
+export function createFirestoreLink({ database, definitions }: Options) {
 
     return new ApolloLink((operation, forward) => {
 
@@ -29,6 +33,7 @@ export function createFirestoreLink({ database, partialSchema }: Options) {
         const context = { database };
         const rootValue = {};
         const mainDefinition = getMainDefinition(query);
+        const schema = createFullSchema(definitions);
         const operationType: OperationTypeNode =
             mainDefinition.kind === "OperationDefinition" ? mainDefinition.operation : "query";
         if (operationType === "subscription") {
@@ -60,19 +65,27 @@ export function createFirestoreLink({ database, partialSchema }: Options) {
                 context,
                 variables,
                 operationName,
-            ) as Promise<ExecutionResult>;
+            );
 
-            result.then((data: any) => {
-                observer.next(data);
+            if(result instanceof Promise) {
+                result
+                    .then((data: any) => {
+                        observer.next(data);
+                        observer.complete();
+                    })
+                    .catch((err: any) => {
+                        if (err.name === "AbortError") { return; }
+                        if (err.result && err.result.errors) {
+                            observer.next(err.result);
+                        }
+                        observer.error(err);
+                    });
+            } else {
+                console.debug('Result',result);
+                observer.next(result);
                 observer.complete();
-            })
-                .catch((err: any) => {
-                    if (err.name === "AbortError") { return; }
-                    if (err.result && err.result.errors) {
-                        observer.next(err.result);
-                    }
-                    observer.error(err);
-                });
+            }
+            
         });
     });
 }
