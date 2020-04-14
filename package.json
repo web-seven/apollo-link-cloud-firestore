@@ -31,7 +31,8 @@
     "graphql-tag": "^2.10.3",
     "ts-node": "^8.6.2",
     "tslint": "^6.1.0",
-    "typescript": "^3.8.3"
+    "typescript": "^3.8.3",
+    "uniqid": "^5.2.0"
   },
   "dependencies": {
     "graphql-subscriptions": "^1.1.0"

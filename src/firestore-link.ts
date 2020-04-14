@@ -1,8 +1,9 @@
 import { ApolloLink, Observable } from "apollo-link";
+import { LoggingLink } from 'apollo-logger';
+ 
 import {
     getMainDefinition
 } from "apollo-utilities";
-import { firestore } from "firebase";
 import {
     createSourceEventStream,
     execute,
@@ -13,6 +14,9 @@ import {
 import { ExecutionResultDataDefault } from "graphql/execution/execute";
 import { createFullSchema } from "./graphql";
 
+import { app as FirebaseApp, initializeApp, firestore } from "firebase";
+import uniqid from "uniqid";
+
 export type Constructor = new () => Object;
 
 export interface Definition {
@@ -21,19 +25,37 @@ export interface Definition {
 }
 
 export interface Options {
-    database: firestore.Firestore
+    firebaseApp?: FirebaseApp.App
+    firebaseConfig?: Object 
     definitions: Definition[],
 }
 
-export function createFirestoreLink({ database, definitions }: Options) {
+export function createFirestoreLink({ firebaseApp, firebaseConfig, definitions }: Options): ApolloLink {
 
-    return new ApolloLink((operation, forward) => {
+    if(!firebaseApp && !firebaseConfig) {
+        throw Error('For Firestore link, required Firebase Application or Firebase Configuration to be provided');
+    }
+
+    if(firebaseConfig) {
+        var app = initializeApp(
+            firebaseConfig,
+            "firebaseApp-" + uniqid()
+        );
+        firebaseApp = app;        
+    }
+
+    var database = firestore(firebaseApp);
+    const settings = {};
+    database.settings(settings);
+
+    let firestoreLink = new ApolloLink((operation, forward) => {
 
         const { query, variables, operationName } = operation;
         const context = { database };
         const rootValue = {};
         const mainDefinition = getMainDefinition(query);
         const schema = createFullSchema(definitions);
+        console.debug(schema);
         const operationType: OperationTypeNode =
             mainDefinition.kind === "OperationDefinition" ? mainDefinition.operation : "query";
         if (operationType === "subscription") {
@@ -81,11 +103,14 @@ export function createFirestoreLink({ database, definitions }: Options) {
                         observer.error(err);
                     });
             } else {
-                console.debug('Result',result);
                 observer.next(result);
                 observer.complete();
             }
             
         });
     });
+
+    const logOptions = { logger: console.log };
+
+    return ApolloLink.from([new LoggingLink(logOptions),firestoreLink]);
 }
