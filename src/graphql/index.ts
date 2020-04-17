@@ -4,14 +4,12 @@ import {
     GraphQLList,
     GraphQLObjectType,
     GraphQLSchema,
-    GraphQLString,
-    GraphQLNonNull,
     GraphQLInputObjectType,
-    GraphQLEnumType,
     GraphQLInt,
-    GraphQLFieldMap,
     GraphQLInputFieldConfigMap,
     GraphQLInputType,
+    GraphQLScalarType,
+    GraphQLString,
 } from "graphql";
 import { PubSub } from "graphql-subscriptions";
 import { Definition } from "../firestore-link";
@@ -24,24 +22,17 @@ export type WhereInput = {
     [key: string]: String;
 }
 
+const Codition = {
+    fields: {
+        
+    }
+}
+
 export type OrderByInput = {
     [key: string]: String;
 }
 
-// interface TypeMapping {
-//     [key: string]: GraphQLType;
-// }
-
-// interface ObjectDefinitions {
-//     [key: string]: ObjectTypeDefinitionNode;
-// }
-
 export const pubsub = new PubSub();
-
-function toTitleCase(str: string) {
-    return str.charAt(0).toUpperCase() + str.substr(1);
-}
-
 
 const paginationFields = {
     skip: {
@@ -63,31 +54,9 @@ export const PaginationInputType = new GraphQLInputObjectType({
     fields: paginationFields
 }) 
 
-
-
 export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
     const types = [] as Array<GraphQLObjectType | GraphQLInputObjectType>;
-
-    
-
-    // objectTypes.forEach((definition) => {
-        
-
-    //     types.push(new GraphQLInputObjectType({
-    //         name: 'Filter' + objectType.name + 'Input',
-    //         fields: {
-    //             filter: {
-    //                 type: 
-
-    //             }
-
-    //         }
-    //     }));
-    // });
-
-
-    
 
     const queryType = new GraphQLObjectType({
         name: "Query",
@@ -97,7 +66,6 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                 const objectType = definition.objectType;
                 const typename = objectType.name;
 
-
                 types.push(objectType)
 
                 let inputFields = {} as GraphQLInputFieldConfigMap;
@@ -105,9 +73,37 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
                 Object.keys(typeFields).forEach(fieldKey => {
                     let fieldTypeMap = typeFields[fieldKey];
-                    inputFields[fieldKey] = {
-                        type: fieldTypeMap.type as GraphQLInputType
+
+                    let type = fieldTypeMap.type;
+                    let inputType = type as GraphQLInputType;
+
+                    if(type instanceof GraphQLScalarType) {
+                        switch(type.name) {
+
+                            case 'String':
+                                inputType = new GraphQLList(GraphQLString)
+                            break;
+
+                            case 'Float':
+                                inputType = new GraphQLInputObjectType({
+                                    name: 'ConditionFloat',
+                                    fields: {
+                                        op: {
+                                            type: GraphQLString
+                                        },
+                                        value: {
+                                            type: type
+                                        }
+                                    }
+                                })
+                            break;
+                        }
                     }
+
+                    inputFields[fieldKey] = {
+                        type: inputType
+                    }
+                    
                 })
 
                 let objectTypeFilter = new GraphQLInputObjectType({
@@ -154,10 +150,26 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                     },
                     resolve(_: any, {where, pagination}: any, context: Context) {
                         let query = context.database.collection(typename) as firestore.Query 
-
+                        let fields = objectTypeFilter.getFields();
                         if(where) {
                             Object.keys(where).forEach((key)=>{
-                                query = query.where(key, '==', where[key])
+                                let type = fields[key].type;
+                                let value = where[key];
+                                console.debug(type);
+
+
+                                if(type instanceof GraphQLList) {
+                                    query = query.where(key, 'in', value)
+                                }
+
+                                if(type instanceof GraphQLInputObjectType) {
+                                    switch(type.name) {
+                                        case 'ConditionFloat':
+                                            query = query.where(key, value.op, value.value)
+                                        break;
+                                    }
+                                    
+                                }
                             })
                         }
 
