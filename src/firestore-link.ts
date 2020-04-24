@@ -55,7 +55,7 @@ export function createFirestoreLink({ firebaseApp, firebaseConfig, definitions }
         const rootValue = {};
         const mainDefinition = getMainDefinition(query);
         const schema = createFullSchema(definitions);
-        console.debug(schema);
+        // console.debug(schema);
         const operationType: OperationTypeNode =
             mainDefinition.kind === "OperationDefinition" ? mainDefinition.operation : "query";
         if (operationType === "subscription") {

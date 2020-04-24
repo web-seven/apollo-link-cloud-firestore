@@ -86,7 +86,7 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
                             case 'Float':
                                 inputType = new GraphQLInputObjectType({
-                                    name: 'ConditionFloat',
+                                    name: 'Condition',
                                     fields: {
                                         op: {
                                             type: GraphQLString
@@ -155,16 +155,14 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                             Object.keys(where).forEach((key)=>{
                                 let type = fields[key].type;
                                 let value = where[key];
-                                console.debug(type);
 
-
-                                if(type instanceof GraphQLList) {
+                                if(type instanceof GraphQLList && value instanceof Array && value.length > 0) {
                                     query = query.where(key, 'in', value)
                                 }
 
                                 if(type instanceof GraphQLInputObjectType) {
                                     switch(type.name) {
-                                        case 'ConditionFloat':
+                                        case 'Condition':
                                             query = query.where(key, value.op, value.value)
                                         break;
                                     }
@@ -172,6 +170,19 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                                 }
                             })
                         }
+
+                        if(pagination) {
+                            if(pagination.skip) {
+                                query.startAt(pagination.skip)
+                            }
+                            if(pagination.take) {
+                                console.debug(pagination.take);
+                                query.orderBy("price").limit(pagination.take)
+                            }
+
+                        }
+
+                        console.debug(query);
 
                         const result = query.get();
                         return new Promise<any[]>(resolve => {
