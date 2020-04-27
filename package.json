@@ -26,6 +26,7 @@
   "devDependencies": {
     "apollo-link": "^1.2.13",
     "apollo-utilities": "^1.3.3",
+    "apollo-logger": "^0.3.3",
     "firebase": "^7.11.0",
     "graphql": "^14.6.0",
     "graphql-tag": "^2.10.3",

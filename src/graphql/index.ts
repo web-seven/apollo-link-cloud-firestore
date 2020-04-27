@@ -10,6 +10,7 @@ import {
     GraphQLInputType,
     GraphQLScalarType,
     GraphQLString,
+    GraphQLFloat,
 } from "graphql";
 import { PubSub } from "graphql-subscriptions";
 import { Definition } from "../firestore-link";
@@ -20,12 +21,6 @@ interface Context {
 
 export type WhereInput = {
     [key: string]: String;
-}
-
-const Codition = {
-    fields: {
-        
-    }
 }
 
 export type OrderByInput = {
@@ -48,6 +43,18 @@ const paginationFields = {
         type: GraphQLInt
     },
 }
+
+export const GraphQLFirestoreCondition =  new GraphQLInputObjectType({
+    name: 'GraphQLFirestoreCondition',
+    fields: {
+        op: {
+            type: GraphQLString
+        },
+        value: {
+            type: GraphQLFloat||GraphQLString
+        }
+    }
+})
 
 export const PaginationInputType = new GraphQLInputObjectType({
     name: 'Pagination',
@@ -85,17 +92,7 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                             break;
 
                             case 'Float':
-                                inputType = new GraphQLInputObjectType({
-                                    name: 'Condition',
-                                    fields: {
-                                        op: {
-                                            type: GraphQLString
-                                        },
-                                        value: {
-                                            type: type
-                                        }
-                                    }
-                                })
+                                inputType = GraphQLFirestoreCondition
                             break;
                         }
                     }
@@ -162,7 +159,7 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
                                 if(type instanceof GraphQLInputObjectType) {
                                     switch(type.name) {
-                                        case 'Condition':
+                                        case 'GraphQLFirestoreCondition':
                                             query = query.where(key, value.op, value.value)
                                         break;
                                     }
@@ -181,8 +178,6 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                             }
 
                         }
-
-                        console.debug(query);
 
                         const result = query.get();
                         return new Promise<any[]>(resolve => {

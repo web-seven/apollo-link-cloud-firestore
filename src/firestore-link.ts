@@ -9,7 +9,7 @@ import {
     execute,
     OperationTypeNode,
     ExecutionResult,
-    GraphQLObjectType,
+    GraphQLObjectType
 } from "graphql";
 import { ExecutionResultDataDefault } from "graphql/execution/execute";
 import { createFullSchema } from "./graphql";
@@ -18,6 +18,8 @@ import { app as FirebaseApp, initializeApp, firestore } from "firebase";
 import uniqid from "uniqid";
 
 export type Constructor = new () => Object;
+
+export const TypesRegistry: Array<any> = [];
 
 export interface Definition {
     target: Constructor
@@ -28,6 +30,12 @@ export interface Options {
     firebaseApp?: FirebaseApp.App
     firebaseConfig?: Object 
     definitions: Definition[],
+}
+
+export function Entity(target: any) {
+    if(!TypesRegistry.includes(target))  {
+        TypesRegistry.push( target );
+    }
 }
 
 export function createFirestoreLink({ firebaseApp, firebaseConfig, definitions }: Options): ApolloLink {
