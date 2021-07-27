@@ -27,6 +27,8 @@ export type OrderByInput = {
     [key: string]: String;
 }
 
+export * from "../firestore-link";
+
 export const pubsub = new PubSub();
 
 const paginationFields = {

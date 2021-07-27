@@ -1,1 +1,1 @@
-export { createFirestoreLink } from "./src/firestore-link";
+export * from "./src/firestore-link";
