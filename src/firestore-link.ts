@@ -13,8 +13,9 @@ import {
 } from "graphql";
 import { ExecutionResultDataDefault } from "graphql/execution/execute";
 import { createFullSchema } from "./graphql";
+import { FirebaseApp, initializeApp } from "firebase/app";
+import { getFirestore } from "firebase/firestore";
 
-import { app as FirebaseApp, initializeApp, firestore } from "firebase";
 import uniqid from "uniqid";
 
 export type Constructor = new () => Object;
@@ -27,7 +28,7 @@ export interface Definition {
 }
 
 export interface Options {
-    firebaseApp?: FirebaseApp.App
+    firebaseApp?: FirebaseApp
     firebaseConfig?: Object 
     definitions: Definition[],
 }
@@ -52,9 +53,9 @@ export function createFirestoreLink({ firebaseApp, firebaseConfig, definitions }
         firebaseApp = app;        
     }
 
-    var database = firestore(firebaseApp);
-    const settings = {};
-    database.settings(settings);
+    var database = getFirestore(firebaseApp);
+    // const settings = {};
+    // database.settings(settings);
 
     let firestoreLink = new ApolloLink((operation, forward) => {
 

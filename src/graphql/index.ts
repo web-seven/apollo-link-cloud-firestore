@@ -1,4 +1,15 @@
-import { firestore } from "firebase";
+import { FirebaseFirestore, QueryConstraint } from "firebase/firestore";
+import { 
+    collection as FirebaseCollection, 
+    query as FirebaseQuery, 
+    where as FirebaseWhere, 
+    getDocs as FirebaseGetDocs, 
+    orderBy as FirebaseOrderBy, 
+    limit as FirebaseLimit,
+    doc as FirebaseDoc, 
+    getDoc as FirebaseGetDoc
+} from "firebase/firestore";
+
 import {
     GraphQLID,
     GraphQLList,
@@ -16,7 +27,7 @@ import { PubSub } from "graphql-subscriptions";
 import { Definition } from "../firestore-link";
 
 interface Context {
-    database: firestore.Firestore;
+    database: FirebaseFirestore;
 }
 
 export type WhereInput = {
@@ -119,10 +130,11 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                         id: { type: GraphQLID },
                     },
                     resolve(_: any, { id }: any, context: Context) {
-                        const result = context.database.collection(typename).doc(id).get();
+                        const docRef = FirebaseDoc(context.database, typename, id);
+                        const result = FirebaseGetDoc(docRef);
                         return new Promise(resolve => {
                             result.then((doc) => {
-                                if (doc.exists) {
+                                if (doc.exists()) {
                                     let target = new definition.target()
                                     Object.assign(target, {
                                         id,
@@ -148,7 +160,7 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                         }
                     },
                     resolve(_: any, {where, pagination}: any, context: Context) {
-                        let query = context.database.collection(typename) as firestore.Query 
+                        let queryContraints = new Array<QueryConstraint>();
                         let fields = objectTypeFilter.getFields();
                         if(where) {
                             Object.keys(where).forEach((key)=>{
@@ -156,13 +168,13 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
                                 let value = where[key];
 
                                 if(type instanceof GraphQLList && value instanceof Array && value.length > 0) {
-                                    query = query.where(key, 'in', value)
+                                    queryContraints.push(FirebaseWhere(key, 'in', value))
                                 }
 
                                 if(type instanceof GraphQLInputObjectType) {
                                     switch(type.name) {
                                         case 'GraphQLFirestoreCondition':
-                                            query = query.where(key, value.op, value.value)
+                                            queryContraints.push(FirebaseWhere(key, value.op, value.value))
                                         break;
                                     }
                                     
@@ -172,16 +184,18 @@ export function createFullSchema(objectTypes: Definition[]): GraphQLSchema {
 
                         if(pagination) {
                             if(pagination.skip) {
-                                query.startAt(pagination.skip)
+                                queryContraints.push(FirebaseOrderBy(pagination.skip))
                             }
                             if(pagination.take) {
                                 console.debug(pagination.take);
-                                query.orderBy("price").limit(pagination.take)
+                                queryContraints.push(FirebaseLimit(pagination.take))
                             }
 
                         }
 
-                        const result = query.get();
+                        let query = FirebaseQuery(FirebaseCollection(context.database, typename), ...queryContraints);
+
+                        const result = FirebaseGetDocs(query);
                         return new Promise<any[]>(resolve => {
                             result.then((querySnapshot) => {
                                 let list = [] as any[];
